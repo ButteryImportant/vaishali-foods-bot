@@ -2,70 +2,37 @@ from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 import requests
 import os
-
-app = FastAPI()
-
-# Configuration from Environment Variables
-VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "vaishali123")
-ACCESS_TOKEN = os.environ.get("EAAOdkFrIZC94BRqp6ZBX1DgxXSbxOnt2lvTmGAD5UkhwITyOZAtfHQzNgHp8yqB5kVuxZAhVnYrGo1GWbg6FpHO8cHR1E2CXTj1AUWaa2UeT5PJ6UShGItRmp9nZBNAJVOJOvqbPCEZB44sVZBCTBN5UNFWBul9Ael3n7BoWmUY9RCnHrJXEzk6HhExscEUYFbjdw83T7wdiQGvPah4lqUOR0ZCGkMuZANPO9NUaayoSZAyHwbQmpuKXMVDdYVdl8ifeMl0YOpv9O24CyvNBntxmyqUwZDZD")
-PHONE_NUMBER_ID = os.environ.get("1160798840444641")
-BIN_ID = os.environ.get("6a1b019b21f9ee59d29e12ba")
-BIN_KEY = os.environ.get("$2a$10$y8QumvRZDDHMyd6UbaPuPevzKEXPnZ9v53hsY5COpN09OEc8SlFuO")
-
-user_state = {}
-
-# --- CLOUD DATABASE FUNCTIONS ---
-def get_orders_from_cloud():
-    try:
-        url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
-        headers = {"X-Master-Key": BIN_KEY}
-        response = requests.get(url, headers=headers)
-        return response.json().get("record", [])
-    except Exception as e:
-        print(f"DEBUG: Cloud Load Error: {e}")
-        return []
-
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Setup Google Sheets
+app = FastAPI()
+
+# Configuration (Always use os.environ.get to keep secrets safe!)
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
+ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
+PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
+ADMIN_PHONE = os.environ.get("ADMIN_PHONE")
+
+# Google Sheets Setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-# IMPORTANT: Put your downloaded JSON file in your project folder
 creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
 client = gspread.authorize(creds)
 sheet = client.open("VaishaliOrders").sheet1
 
-def save_order_to_sheets(state):
-    # Appends the data as a new row
-    sheet.append_row([state['item'], state['qty'], state['address']])
+user_state = {}
 
-# --- SEND MESSAGE (DEBUGGED) ---
-def send_message(to, text):
-    url = f"https://graph.facebook.com/v20.0/1160798840444641/messages"
-    headers = {
-        "Authorization": f"Bearer EAAOdkFrIZC94BRqp6ZBX1DgxXSbxOnt2lvTmGAD5UkhwITyOZAtfHQzNgHp8yqB5kVuxZAhVnYrGo1GWbg6FpHO8cHR1E2CXTj1AUWaa2UeT5PJ6UShGItRmp9nZBNAJVOJOvqbPCEZB44sVZBCTBN5UNFWBul9Ael3n7BoWmUY9RCnHrJXEzk6HhExscEUYFbjdw83T7wdiQGvPah4lqUOR0ZCGkMuZANPO9NUaayoSZAyHwbQmpuKXMVDdYVdl8ifeMl0YOpv9O24CyvNBntxmyqUwZDZD",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": text}
-    }
+def send_message(to, text, interactive=None):
+    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
+    
+    data = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
+    if interactive:
+        data["type"] = "interactive"
+        data["interactive"] = interactive
     
     response = requests.post(url, headers=headers, json=data)
-    
-    # DEBUG: This will show in your Render logs if Meta rejects the message
-    print(f"DEBUG: WhatsApp API Response: {response.status_code} - {response.text}")
+    print(f"DEBUG: API Response: {response.status_code} - {response.text}")
     return response
-
-# --- WEBHOOK ---
-@app.get("/webhook")
-def verify(request: Request):
-    params = request.query_params
-    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
-        return PlainTextResponse(content=params.get("hub.challenge"))
-    return PlainTextResponse(content="error")
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -75,6 +42,7 @@ async def webhook(request: Request):
         if "messages" in value:
             msg = value["messages"][0]
             phone = msg["from"]
+            
             # Handle Buttons OR Text
             if msg.get("type") == "interactive":
                 text = msg["interactive"]["button_reply"]["id"]
@@ -110,9 +78,10 @@ async def webhook(request: Request):
                 user_state[phone] = state
                 send_message(phone, f"Confirm order: {state['item']} ({state['qty']}kg) to {text}? Reply CONFIRM")
             elif text == "confirm" and isinstance(state, dict):
-                save_order_to_cloud(state)
+                # Save to Google Sheets
+                sheet.append_row([phone, state['item'], state['qty'], state['address']])
                 send_message(phone, "✅ Order placed!")
-                send_message(ADMIN_PHONE, f"🔔 NEW ORDER from {phone}: {state['item']}, {state['qty']}kg")
+                send_message(ADMIN_PHONE, f"🔔 NEW ORDER: {state['item']}, {state['qty']}kg to {state['address']}")
                 user_state.pop(phone, None)
     except Exception as e: print(f"ERROR: {e}")
     return {"status": "ok"}
