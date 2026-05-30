@@ -38,36 +38,34 @@ async def verify_webhook(request: Request):
 @app.post("/webhook")
 async def handle_message(request: Request):
     data = await request.json()
-    # Add this line to see exactly what WhatsApp sent you
-    print(f"DEBUG: Received payload: {json.dumps(data)}") 
     
+    # Extract sender and text/button info safely
     try:
-        # ... rest of your code
         value = data["entry"][0]["changes"][0]["value"]
         message = value["messages"][0]
         sender = message["from"]
         
-        # Determine if it's text or a button click
         if message["type"] == "interactive":
             text = message["interactive"]["button_reply"]["id"]
         else:
+            # We use .lower() to make sure "Hi" and "hi" both work
             text = message["text"]["body"].lower()
+            
+        print(f"DEBUG: Processing text: {text} from {sender}")
 
-        # Bot Logic (The "Blocks")
-        current_state = user_state.get(sender, "START")
-        
-        if text in ["hi", "hello", "menu_view"]:
-            # Send the Options Menu (Buttons)
+        # The Logic
+        if text in ["hi", "hello"]:
+            print(f"DEBUG: Triggering buttons for {sender}")
             send_buttons(sender)
             user_state[sender] = "WAITING"
-            
-        elif text == "order_start":
-            # Start Order logic
-            user_state[sender] = "ORDERING"
-            # Send message back here...
-            
+        
+        elif text == "menu_view":
+            # Add logic for what happens when they click 'View Menu'
+            pass
+
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"DEBUG: Error in handle_message: {e}")
+        
     return {"status": "ok"}
 
 # Helper to send buttons back to user
