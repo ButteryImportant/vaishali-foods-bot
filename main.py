@@ -6,29 +6,39 @@ import json
 import gspread
 from google.oauth2.credentials import Credentials
 
-# Get the JSON string from Environment Variables
+app = FastAPI()
+
+# Configuration
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
+ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
+PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
+ADMIN_PHONE = os.environ.get("ADMIN_PHONE")
+
+# Google Sheets Setup
 creds_raw = os.environ.get("GSPREAD_AUTH_JSON")
 
 if not creds_raw:
     raise ValueError("GSPREAD_AUTH_JSON environment variable is not set!")
 
-# Parse the JSON
-creds_dict = json.loads(creds_raw)
+try:
+    # Parse the JSON
+    creds_dict = json.loads(creds_raw)
 
-# Create Credentials object directly from the token data
-# Your GSPREAD_AUTH_JSON must contain: 
-# client_id, client_secret, refresh_token, token_uri
-creds = Credentials.from_authorized_user_info(creds_dict)
+    # Create Credentials object directly from the token data
+    creds = Credentials.from_authorized_user_info(creds_dict)
 
-# Authorize gspread using these direct credentials
-client = gspread.authorize(creds)
-sheet = client.open("VaishaliOrders").sheet1
+    # Authorize gspread using these direct credentials
+    client = gspread.authorize(creds)
+    sheet = client.open("VaishaliOrders").sheet1
     print("Successfully connected to Google Sheets!")
+
 except Exception as e:
     print(f"Error connecting to Google Sheets: {e}")
     raise e
 
 user_state = {}
+
+# Add your FastAPI routes (e.g., @app.get("/") or @app.post("/webhook")) below this line
 
 # --- Add your FastAPI routes/logic below ---
 
