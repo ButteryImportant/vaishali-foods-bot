@@ -7,34 +7,33 @@ import gspread
 
 app = FastAPI()
 
-# Configuration (Always use os.environ.get to keep secrets safe!)
+# Configuration
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
 ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 ADMIN_PHONE = os.environ.get("ADMIN_PHONE")
 
 # Google Sheets Setup
-import gspread
+# Ensure your Render Environment Variable 'GSPREAD_AUTH_JSON' 
+# contains the merged JSON (client_id, client_secret, refresh_token, token_uri)
+creds_raw = os.environ.get("GSPREAD_AUTH_JSON")
 
-# Load both parts from environment variables
-creds_raw = os.environ.get("GSPREAD_CREDENTIALS")
-auth_user_raw = os.environ.get("GSPREAD_AUTH_USER")
+if not creds_raw:
+    raise ValueError("FATAL ERROR: GSPREAD_AUTH_JSON environment variable is not set!")
 
-if not creds_raw or not auth_user_raw:
-    raise ValueError("Missing GSPREAD_CREDENTIALS or GSPREAD_AUTH_USER in environment variables!")
-
-creds_dict = json.loads(creds_raw)
-auth_user_dict = json.loads(auth_user_raw)
-
-# Authenticate using the OAuth helper which accepts both dictionaries
-client = gspread.oauth_from_dict(
-    credentials=creds_dict, 
-    authorized_user_info=auth_user_dict
-)
-
-sheet = client.open("VaishaliOrders").sheet1
+try:
+    creds_dict = json.loads(creds_raw)
+    # This authenticates using the combined credentials and token
+    client = gspread.oauth_from_dict(creds_dict)
+    sheet = client.open("VaishaliOrders").sheet1
+    print("Successfully connected to Google Sheets!")
+except Exception as e:
+    print(f"Error connecting to Google Sheets: {e}")
+    raise e
 
 user_state = {}
+
+# --- Add your FastAPI routes/logic below ---
 
 def send_message(to, text, interactive=None):
     url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
