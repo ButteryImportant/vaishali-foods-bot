@@ -18,22 +18,27 @@ ADMIN_PHONE = os.environ.get("ADMIN_PHONE")
 creds_raw = os.environ.get("GSPREAD_AUTH_JSON")
 
 if not creds_raw:
+    print("CRITICAL ERROR: GSPREAD_AUTH_JSON environment variable is missing!")
     raise ValueError("GSPREAD_AUTH_JSON environment variable is not set!")
 
 try:
-    # Parse the JSON
+    print("Attempting to parse GSPREAD_AUTH_JSON...")
     creds_dict = json.loads(creds_raw)
-
-    # Create Credentials object directly from the token data
+    
+    print("Attempting to create Credentials object...")
     creds = Credentials.from_authorized_user_info(creds_dict)
-
-    # Authorize gspread using these direct credentials
+    
+    print("Attempting to authorize gspread...")
     client = gspread.authorize(creds)
+    
+    print("Attempting to open sheet 'VaishaliOrders'...")
     sheet = client.open("VaishaliOrders").sheet1
     print("Successfully connected to Google Sheets!")
 
 except Exception as e:
-    print(f"Error connecting to Google Sheets: {e}")
+    print(f"FAILED TO CONNECT TO GOOGLE SHEETS. Error details:")
+    print(str(e))
+    # Raise the error so Render knows the app failed to start
     raise e
 
 user_state = {}
