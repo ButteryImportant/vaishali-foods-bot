@@ -1,163 +1,107 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 import requests
-import json
 import os
-from datetime import datetime
 
 app = FastAPI()
 
-VERIFY_TOKEN = "vaishali123"
-ACCESS_TOKEN = "YOUR_ACCESS_TOKEN_HERE"
-PHONE_NUMBER_ID = "YOUR_PHONE_NUMBER_ID"
+# Configuration from Environment Variables
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "vaishali123")
+ACCESS_TOKEN = os.environ.get("EAAOdkFrIZC94BRqp6ZBX1DgxXSbxOnt2lvTmGAD5UkhwITyOZAtfHQzNgHp8yqB5kVuxZAhVnYrGo1GWbg6FpHO8cHR1E2CXTj1AUWaa2UeT5PJ6UShGItRmp9nZBNAJVOJOvqbPCEZB44sVZBCTBN5UNFWBul9Ael3n7BoWmUY9RCnHrJXEzk6HhExscEUYFbjdw83T7wdiQGvPah4lqUOR0ZCGkMuZANPO9NUaayoSZAyHwbQmpuKXMVDdYVdl8ifeMl0YOpv9O24CyvNBntxmyqUwZDZD")
+PHONE_NUMBER_ID = os.environ.get("1160798840444641")
+BIN_ID = os.environ.get("6a1b019b21f9ee59d29e12ba")
+BIN_KEY = os.environ.get("$2a$10$y8QumvRZDDHMyd6UbaPuPevzKEXPnZ9v53hsY5COpN09OEc8SlFuO")
 
 user_state = {}
 
-# ---------------- HOME ----------------
-@app.get("/")
-def home():
-    return {"status": "working"}
+# --- CLOUD DATABASE FUNCTIONS ---
+def get_orders_from_cloud():
+    try:
+        url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
+        headers = {"X-Master-Key": BIN_KEY}
+        response = requests.get(url, headers=headers)
+        return response.json().get("record", [])
+    except Exception as e:
+        print(f"DEBUG: Cloud Load Error: {e}")
+        return []
 
-# ---------------- VERIFY WEBHOOK ----------------
-@app.get("/webhook")
-def verify(request: Request):
-    params = request.query_params
+def save_order_to_cloud(new_order):
+    try:
+        orders = get_orders_from_cloud()
+        orders.append(new_order)
+        url = f"https://api.jsonbin.io/v3/b/6a1b019b21f9ee59d29e12ba"
+        headers = {"X-Master-Key": BIN_KEY, "Content-Type": "application/json"}
+        requests.put(url, headers=headers, json=orders)
+    except Exception as e:
+        print(f"DEBUG: Cloud Save Error: {e}")
 
-    mode = params.get("hub.mode")
-    token = params.get("hub.verify_token")
-    challenge = params.get("hub.challenge")
-
-    print("META HIT:", mode, token, challenge)
-
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        return PlainTextResponse(content=challenge)
-
-    return PlainTextResponse(content="error")
-
-
-# ---------------- SEND MESSAGE ----------------
+# --- SEND MESSAGE (DEBUGGED) ---
 def send_message(to, text):
-    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-
+    url = f"https://graph.facebook.com/v20.0/1160798840444641/messages"
     headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Authorization": f"Bearer EAAOdkFrIZC94BRqp6ZBX1DgxXSbxOnt2lvTmGAD5UkhwITyOZAtfHQzNgHp8yqB5kVuxZAhVnYrGo1GWbg6FpHO8cHR1E2CXTj1AUWaa2UeT5PJ6UShGItRmp9nZBNAJVOJOvqbPCEZB44sVZBCTBN5UNFWBul9Ael3n7BoWmUY9RCnHrJXEzk6HhExscEUYFbjdw83T7wdiQGvPah4lqUOR0ZCGkMuZANPO9NUaayoSZAyHwbQmpuKXMVDdYVdl8ifeMl0YOpv9O24CyvNBntxmyqUwZDZD",
         "Content-Type": "application/json"
     }
-
     data = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
         "text": {"body": text}
     }
+    
+    response = requests.post(url, headers=headers, json=data)
+    
+    # DEBUG: This will show in your Render logs if Meta rejects the message
+    print(f"DEBUG: WhatsApp API Response: {response.status_code} - {response.text}")
+    return response
 
-    requests.post(url, headers=headers, json=data)
+# --- WEBHOOK ---
+@app.get("/webhook")
+def verify(request: Request):
+    params = request.query_params
+    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
+        return PlainTextResponse(content=params.get("hub.challenge"))
+    return PlainTextResponse(content="error")
 
-
-# ---------------- ORDERS SYSTEM ----------------
-ORDERS_FILE = "orders.json"
-
-def load_orders():
-    if not os.path.exists(ORDERS_FILE):
-        return []
-    with open(ORDERS_FILE, "r") as f:
-        return json.load(f)
-
-def save_orders(orders):
-    with open(ORDERS_FILE, "w") as f:
-        json.dump(orders, f, indent=2)
-
-def create_order(phone, item, qty, address):
-    orders = load_orders()
-
-    order = {
-        "phone": phone,
-        "item": item,
-        "qty": qty,
-        "address": address,
-        "status": "pending",
-        "time": str(datetime.now())
-    }
-
-    orders.append(order)
-    save_orders(orders)
-
-
-# ---------------- WEBHOOK ----------------
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
-
+    
     try:
-        msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
-        phone = msg["from"]
-        text = msg["text"]["body"].lower()
+        # Defensive parsing
+        value = data.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
+        
+        if "messages" in value:
+            msg = value["messages"][0]
+            phone = msg["from"]
+            text = msg["text"]["body"].lower()
+            state = user_state.get(phone, "START")
 
-        state = user_state.get(phone, "START")
-
-        print("STATE:", state, "USER:", phone, text)
-
-        # ---------------- START ----------------
-        if text in ["hi", "hello", "start"]:
-            user_state[phone] = "MENU"
-            send_message(phone, "👋 Welcome to Vaishali Foods 🍬\\nReply MENU to continue")
-
-        # ---------------- MENU ----------------
-        elif text == "menu" or state == "MENU":
-            user_state[phone] = "SELECT_ITEM"
-            send_message(phone,
-                "🍬 MENU:\\n1. Besan Laddoo - ₹200/kg\\n2. Til Laddoo - ₹250/kg\\nReply 1 or 2"
-            )
-
-        # ---------------- ITEM ----------------
-        elif state == "SELECT_ITEM":
-            if text == "1":
-                user_state[phone] = {"step": "QTY", "item": "Besan Laddoo"}
+            # Logic Router
+            if text in ["hi", "hello", "start"]:
+                user_state[phone] = "MENU"
+                send_message(phone, "👋 Welcome to Vaishali Foods! Reply MENU")
+            elif text == "menu" or state == "MENU":
+                user_state[phone] = "SELECT_ITEM"
+                send_message(phone, "MENU:\n1. Besan Laddoo - ₹200\n2. Til Laddoo - ₹250\nReply 1 or 2")
+            elif isinstance(state, str) and state == "SELECT_ITEM":
+                item = "Besan Laddoo" if text == "1" else "Til Laddoo"
+                user_state[phone] = {"step": "QTY", "item": item}
                 send_message(phone, "How many kg?")
-
-            elif text == "2":
-                user_state[phone] = {"step": "QTY", "item": "Til Laddoo"}
-                send_message(phone, "How many kg?")
-
-            else:
-                send_message(phone, "Reply 1 or 2")
-
-        # ---------------- QTY ----------------
-        elif isinstance(state, dict) and state.get("step") == "QTY":
-            state["qty"] = text
-            state["step"] = "ADDRESS"
-            user_state[phone] = state
-            send_message(phone, "Send address")
-
-        # ---------------- ADDRESS ----------------
-        elif isinstance(state, dict) and state.get("step") == "ADDRESS":
-            state["address"] = text
-            state["step"] = "CONFIRM"
-            user_state[phone] = state
-
-            send_message(phone,
-                f"Order Summary:\\nItem: {state['item']}\\nQty: {state['qty']} kg\\nAddress: {state['address']}\\nReply CONFIRM"
-            )
-
-        # ---------------- CONFIRM ----------------
-        elif text == "confirm":
-            state = user_state.get(phone)
-
-            if isinstance(state, dict):
-                create_order(
-                    phone,
-                    state.get("item"),
-                    state.get("qty"),
-                    state.get("address")
-                )
-
-            send_message(phone, "✅ Order placed successfully!")
-            user_state.pop(phone, None)
-
-        else:
-            send_message(phone, "Type MENU to start")
-
+            elif isinstance(state, dict) and state.get("step") == "QTY":
+                state.update({"qty": text, "step": "ADDRESS"})
+                user_state[phone] = state
+                send_message(phone, "Please send your address.")
+            elif isinstance(state, dict) and state.get("step") == "ADDRESS":
+                state.update({"address": text, "step": "CONFIRM"})
+                user_state[phone] = state
+                send_message(phone, f"Confirm order: {state['item']} ({state['qty']}kg) to {text}? Reply CONFIRM")
+            elif text == "confirm" and isinstance(state, dict):
+                save_order_to_cloud(state)
+                send_message(phone, "✅ Order placed!")
+                user_state.pop(phone, None)
+        
     except Exception as e:
-        print("ERROR:", e)
+        print(f"WEBHOOK ERROR: {e}")
 
     return {"status": "ok"}
