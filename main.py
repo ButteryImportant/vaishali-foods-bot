@@ -25,15 +25,19 @@ def get_orders_from_cloud():
         print(f"DEBUG: Cloud Load Error: {e}")
         return []
 
-def save_order_to_cloud(new_order):
-    try:
-        orders = get_orders_from_cloud()
-        orders.append(new_order)
-        url = f"https://api.jsonbin.io/v3/b/6a1b019b21f9ee59d29e12ba"
-        headers = {"X-Master-Key": BIN_KEY, "Content-Type": "application/json"}
-        requests.put(url, headers=headers, json=orders)
-    except Exception as e:
-        print(f"DEBUG: Cloud Save Error: {e}")
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Setup Google Sheets
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# IMPORTANT: Put your downloaded JSON file in your project folder
+creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+client = gspread.authorize(creds)
+sheet = client.open("VaishaliOrders").sheet1
+
+def save_order_to_sheets(state):
+    # Appends the data as a new row
+    sheet.append_row([state['item'], state['qty'], state['address']])
 
 # --- SEND MESSAGE (DEBUGGED) ---
 def send_message(to, text):
