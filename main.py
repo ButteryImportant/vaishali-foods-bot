@@ -4,7 +4,6 @@ import requests
 import json
 import os
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 app = FastAPI()
 
@@ -15,12 +14,17 @@ PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 ADMIN_PHONE = os.environ.get("ADMIN_PHONE")
 
 # Google Sheets Setup
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# We load the dictionary from the environment variable GSPREAD_AUTH_JSON
+creds_raw = os.environ.get("GSPREAD_AUTH_JSON")
 
-# LOAD FROM ENVIRONMENT VARIABLE (Do not use .from_json_keyfile_name)
-creds_dict = json.loads(os.environ.get("GOOGLE_CREDENTIALS_JSON"))
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-client = gspread.authorize(creds)
+if not creds_raw:
+    raise ValueError("GSPREAD_AUTH_JSON environment variable is not set!")
+
+creds_dict = json.loads(creds_raw)
+
+# Authenticate using gspread's built-in helper for authorized user JSON
+# This replaces the old ServiceAccountCredentials method
+client = gspread.service_account_from_dict(creds_dict)
 sheet = client.open("VaishaliOrders").sheet1
 
 user_state = {}
