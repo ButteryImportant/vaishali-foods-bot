@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 import requests
+import json
 import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -15,7 +16,10 @@ ADMIN_PHONE = os.environ.get("ADMIN_PHONE")
 
 # Google Sheets Setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+
+# LOAD FROM ENVIRONMENT VARIABLE (Do not use .from_json_keyfile_name)
+creds_dict = json.loads(os.environ.get("GOOGLE_CREDENTIALS_JSON"))
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open("VaishaliOrders").sheet1
 
