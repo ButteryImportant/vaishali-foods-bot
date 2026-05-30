@@ -38,7 +38,11 @@ async def verify_webhook(request: Request):
 @app.post("/webhook")
 async def handle_message(request: Request):
     data = await request.json()
+    # Add this line to see exactly what WhatsApp sent you
+    print(f"DEBUG: Received payload: {json.dumps(data)}") 
+    
     try:
+        # ... rest of your code
         value = data["entry"][0]["changes"][0]["value"]
         message = value["messages"][0]
         sender = message["from"]
