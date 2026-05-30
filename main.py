@@ -71,7 +71,10 @@ async def handle_message(request: Request):
 # Helper to send buttons back to user
 def send_buttons(recipient):
     url = f"https://graph.facebook.com/v21.0/{os.environ.get('PHONE_NUMBER_ID')}/messages"
-    headers = {"Authorization": f"Bearer {os.environ.get('ACCESS_TOKEN')}"}
+    headers = {
+        "Authorization": f"Bearer {os.environ.get('ACCESS_TOKEN')}",
+        "Content-Type": "application/json"
+    }
     payload = {
         "messaging_product": "whatsapp",
         "to": recipient,
@@ -87,4 +90,12 @@ def send_buttons(recipient):
             }
         }
     }
-    requests.post(url, json=payload, headers=headers)
+    
+    print(f"DEBUG: Attempting to send buttons to {recipient}...")
+    response = requests.post(url, json=payload, headers=headers)
+    
+    # This will print the error if the request fails
+    if response.status_code != 200:
+        print(f"DEBUG: WhatsApp API Error {response.status_code}: {response.text}")
+    else:
+        print(f"DEBUG: Button message sent successfully!")
