@@ -66,24 +66,33 @@ def verify(request: Request):
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
-    
     try:
-        # Defensive parsing
         value = data.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
-        
         if "messages" in value:
             msg = value["messages"][0]
             phone = msg["from"]
-            text = msg["text"]["body"].lower()
+            # Handle Buttons OR Text
+            if msg.get("type") == "interactive":
+                text = msg["interactive"]["button_reply"]["id"]
+            else:
+                text = msg["text"]["body"].lower()
+
             state = user_state.get(phone, "START")
 
-            # Logic Router
             if text in ["hi", "hello", "start"]:
                 user_state[phone] = "MENU"
-                send_message(phone, "👋 Welcome to Vaishali Foods! Reply MENU")
+                send_message(phone, "👋 Welcome to Vaishali Foods!")
             elif text == "menu" or state == "MENU":
                 user_state[phone] = "SELECT_ITEM"
-                send_message(phone, "MENU:\n1. Besan Laddoo - ₹200\n2. Til Laddoo - ₹250\nReply 1 or 2")
+                menu = {
+                    "type": "button",
+                    "body": {"text": "Select your Laddoo:"},
+                    "action": {"buttons": [
+                        {"type": "reply", "reply": {"id": "1", "title": "Besan Laddoo"}},
+                        {"type": "reply", "reply": {"id": "2", "title": "Til Laddoo"}}
+                    ]}
+                }
+                send_message(phone, "", interactive=menu)
             elif isinstance(state, str) and state == "SELECT_ITEM":
                 item = "Besan Laddoo" if text == "1" else "Til Laddoo"
                 user_state[phone] = {"step": "QTY", "item": item}
@@ -91,7 +100,7 @@ async def webhook(request: Request):
             elif isinstance(state, dict) and state.get("step") == "QTY":
                 state.update({"qty": text, "step": "ADDRESS"})
                 user_state[phone] = state
-                send_message(phone, "Please send your address.")
+                send_message(phone, "Please send your delivery address.")
             elif isinstance(state, dict) and state.get("step") == "ADDRESS":
                 state.update({"address": text, "step": "CONFIRM"})
                 user_state[phone] = state
@@ -99,9 +108,7 @@ async def webhook(request: Request):
             elif text == "confirm" and isinstance(state, dict):
                 save_order_to_cloud(state)
                 send_message(phone, "✅ Order placed!")
+                send_message(ADMIN_PHONE, f"🔔 NEW ORDER from {phone}: {state['item']}, {state['qty']}kg")
                 user_state.pop(phone, None)
-        
-    except Exception as e:
-        print(f"WEBHOOK ERROR: {e}")
-
+    except Exception as e: print(f"ERROR: {e}")
     return {"status": "ok"}
