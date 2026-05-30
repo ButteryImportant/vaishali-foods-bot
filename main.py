@@ -1,31 +1,28 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 import requests
-import json
 import os
+import json
 import gspread
+from google.oauth2.credentials import Credentials
 
-app = FastAPI()
-
-# Configuration
-VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
-ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
-PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
-ADMIN_PHONE = os.environ.get("ADMIN_PHONE")
-
-# Google Sheets Setup
-# Ensure your Render Environment Variable 'GSPREAD_AUTH_JSON' 
-# contains the merged JSON (client_id, client_secret, refresh_token, token_uri)
+# Get the JSON string from Environment Variables
 creds_raw = os.environ.get("GSPREAD_AUTH_JSON")
 
 if not creds_raw:
-    raise ValueError("FATAL ERROR: GSPREAD_AUTH_JSON environment variable is not set!")
+    raise ValueError("GSPREAD_AUTH_JSON environment variable is not set!")
 
-try:
-    creds_dict = json.loads(creds_raw)
-    # This authenticates using the combined credentials and token
-    client = gspread.oauth_from_dict(creds_dict)
-    sheet = client.open("VaishaliOrders").sheet1
+# Parse the JSON
+creds_dict = json.loads(creds_raw)
+
+# Create Credentials object directly from the token data
+# Your GSPREAD_AUTH_JSON must contain: 
+# client_id, client_secret, refresh_token, token_uri
+creds = Credentials.from_authorized_user_info(creds_dict)
+
+# Authorize gspread using these direct credentials
+client = gspread.authorize(creds)
+sheet = client.open("VaishaliOrders").sheet1
     print("Successfully connected to Google Sheets!")
 except Exception as e:
     print(f"Error connecting to Google Sheets: {e}")
