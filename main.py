@@ -14,17 +14,24 @@ PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 ADMIN_PHONE = os.environ.get("ADMIN_PHONE")
 
 # Google Sheets Setup
-# We load the dictionary from the environment variable GSPREAD_AUTH_JSON
-creds_raw = os.environ.get("GSPREAD_AUTH_JSON")
+import gspread
 
-if not creds_raw:
-    raise ValueError("GSPREAD_AUTH_JSON environment variable is not set!")
+# Load both parts from environment variables
+creds_raw = os.environ.get("GSPREAD_CREDENTIALS")
+auth_user_raw = os.environ.get("GSPREAD_AUTH_USER")
+
+if not creds_raw or not auth_user_raw:
+    raise ValueError("Missing GSPREAD_CREDENTIALS or GSPREAD_AUTH_USER in environment variables!")
 
 creds_dict = json.loads(creds_raw)
+auth_user_dict = json.loads(auth_user_raw)
 
-# Authenticate using gspread's built-in helper for authorized user JSON
-# This replaces the old ServiceAccountCredentials method
-client = gspread.service_account_from_dict(creds_dict)
+# Authenticate using the OAuth helper which accepts both dictionaries
+client = gspread.oauth_from_dict(
+    credentials=creds_dict, 
+    authorized_user_info=auth_user_dict
+)
+
 sheet = client.open("VaishaliOrders").sheet1
 
 user_state = {}
